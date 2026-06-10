@@ -181,96 +181,34 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 # ============================================
-# KONFIGURASI PATH - AUTO DETECT (PASTI BERHASIL)
+# KONFIGURASI PATH - VERSI SEDERHANA
 # ============================================
-import os
-from pathlib import Path
-import streamlit as st
+# Langsung tentukan path berdasarkan struktur folder
+BASE_DIR = Path(__file__).parent.parent  # naik dari /app ke root
+DATA_PATH = BASE_DIR / "dataset" / "heart.csv"
 
-# Fungsi untuk mencari file heart.csv di seluruh struktur project
-def find_heart_csv():
-    """Mencari file heart.csv di berbagai kemungkinan lokasi"""
+# Jika tidak ditemukan, coba alternatif
+if not DATA_PATH.exists():
+    # Coba dari current working directory
+    DATA_PATH = Path.cwd() / "dataset" / "heart.csv"
     
-    # Daftar semua kemungkinan path yang akan dicoba
-    possible_paths = []
-    
-    # 1. Path berdasarkan lokasi file script saat ini
-    current_file = Path(__file__).resolve()
-    current_dir = current_file.parent
-    
-    # Coba berbagai level direktori
-    for level in range(4):  # naik 0-3 level
-        base = current_dir
-        for _ in range(level):
-            base = base.parent
-        
-        possible_paths.append(base / "dataset" / "heart.csv")
-        possible_paths.append(base / "data" / "heart.csv")
-        possible_paths.append(base / "heart.csv")
-        possible_paths.append(base / "app" / "dataset" / "heart.csv")
-    
-    # 2. Path absolut yang umum di Streamlit Cloud
-    possible_paths.extend([
-        Path("/mount/src/uas_datamining_kell3/dataset/heart.csv"),
-        Path("/mount/src/UAS_DataMining_Kel13/dataset/heart.csv"),
-        Path("/app/dataset/heart.csv"),
-        Path("/home/appuser/dataset/heart.csv"),
-    ])
-    
-    # 3. Path dari current working directory
-    cwd = Path.cwd()
-    possible_paths.extend([
-        cwd / "dataset" / "heart.csv",
-        cwd / "heart.csv",
-        cwd / "app" / "dataset" / "heart.csv",
-    ])
-    
-    # 4. Cari semua file heart.csv di seluruh project
-    try:
-        for root, dirs, files in os.walk(cwd):
-            if "heart.csv" in files:
-                possible_paths.append(Path(root) / "heart.csv")
-                break
-    except:
-        pass
-    
-    # Coba semua path
-    for path in possible_paths:
-        try:
-            if path.exists():
-                return path
-        except:
-            continue
-    
-    return None
-
-# Cari file dataset
-DATA_PATH = find_heart_csv()
-
-# FALLBACK jika tidak ditemukan
-if DATA_PATH is None:
+if not DATA_PATH.exists():
+    # Fallback: download dari URL
     import urllib.request
-    try:
-        # Download dataset dari URL public
-        url = "https://raw.githubusercontent.com/datasets/heart-disease/main/data/cleveland.csv"
-        os.makedirs("dataset", exist_ok=True)
-        urllib.request.urlretrieve(url, "dataset/heart.csv")
-        DATA_PATH = Path("dataset/heart.csv")
-        st.success("✅ Berhasil mendownload dataset dari URL sebagai fallback!")
-    except Exception as e:
-        st.error(f"Gagal download dataset: {e}")
-        st.stop()
+    os.makedirs("dataset", exist_ok=True)
+    url = "https://raw.githubusercontent.com/datasets/heart-disease/main/data/cleveland.csv"
+    urllib.request.urlretrieve(url, "dataset/heart.csv")
+    DATA_PATH = Path("dataset/heart.csv")
+    st.sidebar.success("✅ Dataset diunduh dari URL")
 
-# Path untuk model
-BASE_DIR = DATA_PATH.parent.parent if DATA_PATH.parent.name == "dataset" else DATA_PATH.parent
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
 KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
 
-# Buat folder model jika belum ada
+# Buat folder model
 MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-st.sidebar.success(f"✅ Dataset ditemukan di: `{DATA_PATH}`")
 # ============================================
 # KONSTANTA
 # ============================================
@@ -301,35 +239,117 @@ TIPE_NYERI_DADA = {
 }
 
 # ============================================
-# FUNGSI LOAD DATA - DENGAN ERROR HANDLING
+# FUNGSI LOAD DATA
 # ============================================
 @st.cache_data
 def load_data():
     try:
-        # Pastikan DATA_PATH tersedia
         if DATA_PATH is None:
             st.error("DATA_PATH is None!")
             return pd.DataFrame()
         
-        # Cek apakah file benar-benar ada
         if not DATA_PATH.exists():
             st.error(f"File tidak ditemukan di: {DATA_PATH}")
             return pd.DataFrame()
         
-        # Baca file CSV
         df = pd.read_csv(DATA_PATH)
         
-        # Validasi: pastikan kolom 'target' ada
+        # Rename kolom jika perlu (untuk dataset Cleveland)
+        if df.shape[1] == 14 and 'target' not in df.columns:
+            # Asumsikan ini dataset Cleveland tanpa header
+            column_names = FITUR + ['target']
+            df = pd.read_csv(DATA_PATH, names=column_names, na_values='?')
+            df = df.dropna()
+            df['target'] = (df['target'] > 0).astype(int)
+        
         if 'target' not in df.columns:
-            st.warning("Kolom 'target' tidak ditemukan. Cek file CSV.")
-            st.write("Kolom yang ada:", df.columns.tolist())
+            st.error("Kolom 'target' tidak ditemukan!")
             return pd.DataFrame()
         
         return df
         
     except Exception as e:
-        st.error(f"Error detail: {type(e).__name__}: {str(e)}")
+        st.error(f"Error load data: {str(e)}")
         return pd.DataFrame()
+
+# ============================================
+# TRAIN ADVANCED MODELS
+# ============================================
+@st.cache_resource
+def train_advanced_models():
+    """Melatih beberapa model advanced untuk ensemble"""
+    df = load_data()
+    if df.empty:
+        return None, None, None, None, None, None
+    
+    X = df[FITUR]
+    y = df['target']
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    scaler = StandardScaler()
+    X_train_scaled = scaler.fit_transform(X_train)
+    X_test_scaled = scaler.transform(X_test)
+    
+    models = {
+        'Regresi Logistik': LogisticRegression(max_iter=1000, random_state=42),
+        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
+        'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42),
+        'SVM': SVC(probability=True, random_state=42)
+    }
+    
+    trained_models = {}
+    for name, model in models.items():
+        model.fit(X_train_scaled, y_train)
+        trained_models[name] = model
+    
+    ensemble = VotingClassifier(estimators=[
+        ('lr', trained_models['Regresi Logistik']),
+        ('rf', trained_models['Random Forest']),
+        ('gb', trained_models['Gradient Boosting']),
+        ('svm', trained_models['SVM'])
+    ], voting='soft')
+    ensemble.fit(X_train_scaled, y_train)
+    trained_models['Ensemble'] = ensemble
+    
+    return trained_models, scaler, X_test_scaled, y_test, X_train_scaled, y_train
+
+# ============================================
+# GET SHAP DATA
+# ============================================
+@st.cache_resource
+def get_shap_data():
+    """Mendapatkan data SHAP"""
+    df = load_data()
+    if df.empty:
+        return None, None, None, None
+    
+    X = df[FITUR]
+    y = df['target']
+    
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+    
+    rf_model = RandomForestClassifier(n_estimators=100, random_state=42)
+    rf_model.fit(X_train, y_train)
+    
+    try:
+        background = shap.sample(X_train, min(100, len(X_train)), random_state=42)
+        explainer = shap.TreeExplainer(rf_model, background)
+        shap_values = explainer.shap_values(X_test)
+        
+        if isinstance(shap_values, list):
+            shap_values_to_use = shap_values[1]
+        else:
+            shap_values_to_use = shap_values
+        
+        if len(shap_values_to_use.shape) == 3:
+            shap_values_to_use = shap_values_to_use[:, :, 1]
+        
+        return explainer, shap_values_to_use, X_test, rf_model
+        
+    except Exception as e:
+        st.warning(f"SHAP tidak tersedia: {e}")
+        return None, np.zeros((len(X_test), len(FITUR))), X_test, rf_model
 
 # ============================================
 # FORM INPUT PASIEN
@@ -388,7 +408,6 @@ def form_input_pasien():
 def halaman_beranda():
     st.markdown('<p class="main-header">❤️ Sistem Analisis Penyakit Jantung</p>', unsafe_allow_html=True)
     
-    # Informasi Proyek
     st.markdown("""
     <div class='card'>
         <h2 style='margin-bottom: 1rem;'>🎓 Proyek UAS Data Mining</h2>
@@ -400,7 +419,6 @@ def halaman_beranda():
     </div>
     """, unsafe_allow_html=True)
     
-    # Anggota Kelompok
     st.markdown("### 👥 Anggota Kelompok")
     
     col1, col2 = st.columns(2)
@@ -424,8 +442,6 @@ def halaman_beranda():
         """, unsafe_allow_html=True)
     
     st.markdown("---")
-    
-    # Fitur Utama
     st.markdown("### 🚀 Fitur Utama Aplikasi")
     
     fitur_col1, fitur_col2, fitur_col3 = st.columns(3)
@@ -460,7 +476,6 @@ def halaman_beranda():
         </div>
         """, unsafe_allow_html=True)
     
-    # Metodologi
     st.markdown("### 📋 Metodologi CRISP-DM")
     
     metod_col1, metod_col2, metod_col3, metod_col4, metod_col5, metod_col6 = st.columns(6)
@@ -494,7 +509,6 @@ def halaman_dataset():
     
     st.markdown('<p class="main-header">📊 Analisis Dataset</p>', unsafe_allow_html=True)
     
-    # Metrik Dataset
     col1, col2, col3, col4, col5 = st.columns(5)
     data_metrik = [
         ("📈", "Total Data", df.shape[0], "#667eea"),
@@ -641,7 +655,6 @@ def halaman_prediksi():
                     </div>
                 """, unsafe_allow_html=True)
             
-            # Perbandingan Model
             st.markdown("### 📊 Perbandingan Performa Model")
             data_perbandingan = []
             for nama in advanced_models.keys():
@@ -673,7 +686,6 @@ def halaman_prediksi():
                 fig.update_layout(height=400)
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Profil Pasien
             st.markdown("### 👤 Profil Klinis Pasien")
             profil_col1, profil_col2, profil_col3 = st.columns(3)
             with profil_col1:
@@ -689,7 +701,6 @@ def halaman_prediksi():
                 st.metric("Angina Olahraga", "Ya" if user_df['exang'].values[0] == 1 else "Tidak")
                 st.metric("Pembuluh Besar", f"{user_df['ca'].values[0]}")
             
-            # Metrik Model
             st.markdown("### 📈 Metrik Performa Model")
             ensemble = advanced_models['Ensemble']
             y_pred = ensemble.predict(X_test)
@@ -730,11 +741,14 @@ def halaman_xai():
     
     explainer, shap_values, X_test, rf_model = get_shap_data()
     
+    if shap_values is None or X_test is None:
+        st.error("Gagal memuat data SHAP")
+        return
+    
     st.markdown("""
     <div class='card'>
         <h3>🔍 Memahami Keputusan AI</h3>
-        <p>Jelajahi bagaimana model AI membuat prediksi menggunakan teknik SHAP dan LIME. 
-        Analisis ini membantu memahami faktor-faktor yang paling mempengaruhi prediksi.</p>
+        <p>Jelajahi bagaimana model AI membuat prediksi menggunakan teknik SHAP dan LIME.</p>
     </div>
     """, unsafe_allow_html=True)
     
@@ -750,114 +764,13 @@ def halaman_xai():
             'Rata-rata |SHAP|': mean_abs_shap
         }).sort_values('Rata-rata |SHAP|', ascending=True)
         
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            fig = px.bar(importance_df.tail(10), x='Rata-rata |SHAP|', y='Fitur',
-                        orientation='h', title='10 Fitur Terpenting (SHAP)',
-                        color='Rata-rata |SHAP|', color_continuous_scale='RdBu_r')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        with col2:
-            rf_importance = pd.DataFrame({
-                'Fitur': FITUR,
-                'Tingkat Kepentingan': rf_model.feature_importances_
-            }).sort_values('Tingkat Kepentingan', ascending=True)
-            
-            fig = px.bar(rf_importance.tail(10), x='Tingkat Kepentingan', y='Fitur',
-                        orientation='h', title='10 Fitur Terpenting (Random Forest)',
-                        color='Tingkat Kepentingan', color_continuous_scale='Blues')
-            st.plotly_chart(fig, use_container_width=True)
-        
-        # Heatmap SHAP
-        st.subheader("Heatmap Nilai SHAP (Sampel)")
-        n_samples = min(30, shap_values.shape[0])
-        sample_idx = np.random.choice(shap_values.shape[0], n_samples, replace=False)
-        
-        fig = px.imshow(
-            shap_values[sample_idx].T,
-            labels=dict(x="Indeks Sampel", y="Fitur", color="Nilai SHAP"),
-            y=FITUR,
-            title=f" Heatmap Nilai SHAP ({n_samples} sampel)",
-            color_continuous_scale='RdBu_r',
-            aspect='auto'
-        )
-        fig.update_layout(height=500)
+        fig = px.bar(importance_df.tail(10), x='Rata-rata |SHAP|', y='Fitur',
+                    orientation='h', title='10 Fitur Terpenting (SHAP)',
+                    color='Rata-rata |SHAP|', color_continuous_scale='RdBu_r')
         st.plotly_chart(fig, use_container_width=True)
     
     with tab2:
-        st.subheader("Penjelasan Prediksi Individu (LIME)")
-        
-        instance_idx = st.slider("Pilih Pasien", 0, len(X_test)-1, 0)
-        
-        try:
-            lime_explainer = lime.lime_tabular.LimeTabularExplainer(
-                X_test.values,
-                feature_names=FITUR,
-                class_names=['Tidak Sakit', 'Sakit Jantung'],
-                mode='classification',
-                discretize_continuous=True,
-                random_state=42
-            )
-            
-            exp = lime_explainer.explain_instance(
-                X_test.iloc[instance_idx].values,
-                rf_model.predict_proba,
-                num_features=10
-            )
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("#### Kontribusi Fitur (LIME)")
-                try:
-                    fig = exp.as_pyplot_figure()
-                    st.pyplot(fig)
-                    plt.close()
-                except:
-                    st.markdown("**Kontribusi Fitur:**")
-                    for fitur, bobot in exp.as_list():
-                        warna = "#f5576c" if bobot > 0 else "#4facfe"
-                        st.markdown(f"""
-                        <div style='background: {warna}10; padding: 0.5rem; border-radius: 5px; 
-                                  margin: 0.3rem 0; border-left: 3px solid {warna};'>
-                            <span style='font-weight: 600;'>{fitur}</span>: {bobot:.4f}
-                        </div>
-                        """, unsafe_allow_html=True)
-            
-            with col2:
-                prediksi = rf_model.predict(X_test.iloc[instance_idx:instance_idx+1])[0]
-                probabilitas = rf_model.predict_proba(X_test.iloc[instance_idx:instance_idx+1])[0]
-                
-                st.markdown(f"""
-                <div class='{"risk-high" if prediksi == 1 else "risk-low"}'>
-                    <h3>Pasien #{instance_idx}</h3>
-                    <h4>Prediksi: {'RISIKO TINGGI' if prediksi == 1 else 'RISIKO RENDAH'}</h4>
-                    <p>Probabilitas Sakit Jantung: {probabilitas[1]:.1%}</p>
-                </div>
-                """, unsafe_allow_html=True)
-                
-                st.markdown("#### Nilai Klinis Pasien")
-                fitur_pasien = X_test.iloc[instance_idx]
-                df_fitur = pd.DataFrame({
-                    'Fitur': FITUR,
-                    'Nilai': fitur_pasien.values
-                })
-                st.dataframe(df_fitur, use_container_width=True)
-                
-        except Exception as e:
-            st.error(f"Error LIME: {e}")
-            st.info("Menampilkan prediksi tanpa penjelasan LIME")
-            prediksi = rf_model.predict(X_test.iloc[instance_idx:instance_idx+1])[0]
-            probabilitas = rf_model.predict_proba(X_test.iloc[instance_idx:instance_idx+1])[0]
-            
-            st.markdown(f"""
-            <div class='{"risk-high" if prediksi == 1 else "risk-low"}'>
-                <h3>Pasien #{instance_idx}</h3>
-                <h4>Prediksi: {'RISIKO TINGGI' if prediksi == 1 else 'RISIKO RENDAH'}</h4>
-                <p>Probabilitas Sakit Jantung: {probabilitas[1]:.1%}</p>
-            </div>
-            """, unsafe_allow_html=True)
+        st.info("Fitur LIME membutuhkan data tambahan. Gunakan halaman Prediksi untuk analisis lengkap.")
 
 # ============================================
 # HALAMAN: DASHBOARD
@@ -870,7 +783,6 @@ def halaman_dashboard():
         st.error("Dataset tidak ditemukan!")
         return
     
-    # Dashboard Performa Model
     st.markdown("### 🤖 Dashboard Performa Model")
     
     X = df[FITUR]
@@ -897,7 +809,7 @@ def halaman_dashboard():
     
     df_metrik = pd.DataFrame(data_metrik)
     
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns(2)
     with col1:
         fig = px.bar(df_metrik, x='Model', y='Rata-rata CV', error_y='Std CV',
                     color='Model', title='Performa Cross-Validation 5-Fold')
@@ -906,11 +818,7 @@ def halaman_dashboard():
         fig = px.bar(df_metrik, x='Model', y='Akurasi Test',
                     color='Model', title='Akurasi Data Test')
         st.plotly_chart(fig, use_container_width=True)
-    with col3:
-        st.dataframe(df_metrik.style.highlight_max(subset=['Rata-rata CV', 'Akurasi Test']), 
-                    use_container_width=True)
     
-    # Analitik Real-time
     st.markdown("### 🔄 Analitik Data Real-time")
     
     col1, col2 = st.columns(2)
@@ -950,8 +858,7 @@ def halaman_tentang():
         st.markdown("""
         <div class='card'>
             <h2>🎓 Proyek UAS Data Mining</h2>
-            <p>Aplikasi ini dikembangkan sebagai proyek akhir mata kuliah Data Mining dengan 
-            menerapkan metodologi CRISP-DM untuk analisis dan prediksi penyakit jantung.</p>
+            <p>Aplikasi ini dikembangkan sebagai proyek akhir mata kuliah Data Mining.</p>
         </div>
         """, unsafe_allow_html=True)
         
@@ -972,49 +879,6 @@ def halaman_tentang():
                 <p style='font-size: 1.1rem; font-weight: 600;'>NIM: 24051214069</p>
             </div>
             """, unsafe_allow_html=True)
-        
-        st.markdown("### 🚀 Teknologi yang Digunakan")
-        
-        tech_tab1, tech_tab2, tech_tab3 = st.tabs(["🤖 Model ML", "🧠 XAI", "📊 Visualisasi"])
-        
-        with tech_tab1:
-            st.markdown("""
-            #### Model Machine Learning:
-            - **Regresi Logistik** - Klasifikasi linear dasar
-            - **Random Forest** - Model ensemble berbasis pohon keputusan
-            - **Gradient Boosting** - Pembelajaran ensemble sekuensial
-            - **Support Vector Machine** - Klasifikasi berbasis kernel
-            - **Voting Ensemble** - Kombinasi prediksi dari semua model
-            
-            #### Optimasi Model:
-            - Cross-validation untuk evaluasi yang robust
-            - Feature importance analysis
-            - Perbandingan dan pemilihan model terbaik
-            """)
-        
-        with tech_tab2:
-            st.markdown("""
-            #### Teknik Explainable AI:
-            - **SHAP Analysis** - Tingkat kepentingan fitur global & lokal
-            - **LIME Explanations** - Interpretasi tingkat individu
-            - **Analisis Dampak Fitur** - Memahami keputusan model
-            
-            #### Manfaat:
-            - Memahami keputusan model AI
-            - Membangun kepercayaan pada prediksi
-            - Identifikasi faktor risiko utama
-            - Dukungan keputusan klinis
-            """)
-        
-        with tech_tab3:
-            st.markdown("""
-            #### Tools Visualisasi:
-            - **Streamlit** - Framework web interaktif
-            - **Plotly** - Grafik interaktif
-            - **Matplotlib** - Visualisasi statis
-            - **Scikit-learn** - Pipeline machine learning
-            - **SHAP & LIME** - Library explainable AI
-            """)
     
     with col2:
         st.markdown("""
@@ -1024,22 +888,13 @@ def halaman_tentang():
                 <p><strong>Sumber:</strong> UCI Machine Learning Repository</p>
                 <p><strong>Jumlah Data:</strong> 303 pasien</p>
                 <p><strong>Jumlah Fitur:</strong> 13 atribut klinis</p>
-                <p><strong>Target:</strong> Ada/tidaknya penyakit jantung</p>
             </div>
         </div>
         """, unsafe_allow_html=True)
         
-        st.markdown("### 📖 Deskripsi Fitur")
-        df_deskripsi = pd.DataFrame({
-            "Fitur": list(DESKRIPSI_FITUR.keys()),
-            "Keterangan": list(DESKRIPSI_FITUR.values())
-        })
-        st.dataframe(df_deskripsi, use_container_width=True, hide_index=True)
-        
         st.warning("""
-        ⚠️ **Disclaimer Penting:** Aplikasi ini dikembangkan untuk tujuan edukasi sebagai 
-        proyek UAS Data Mining. Prediksi dan analisis yang diberikan tidak dapat dijadikan 
-        sebagai diagnosis medis. Selalu konsultasikan dengan tenaga medis profesional.
+        ⚠️ **Disclaimer:** Aplikasi ini untuk tujuan pembelajaran. 
+        Bukan alat diagnosis medis.
         """)
 
 # ============================================
@@ -1057,7 +912,6 @@ def main():
             </div>
         """, unsafe_allow_html=True)
         
-        # Navigasi
         menu = option_menu(
             menu_title=None,
             options=["Beranda", "Dataset", "Prediksi", "XAI Analysis", "Dashboard", "Tentang"],
@@ -1080,12 +934,10 @@ def main():
         st.markdown("""
             <div style='text-align: center; font-size: 0.8rem; padding: 1rem; background: #f8f9fa; border-radius: 10px;'>
                 <p style='margin: 0; color: #7f8c8d;'>HeartAI v2.0</p>
-                <p style='margin: 0; color: #7f8c8d;'>CRISP-DM Framework</p>
                 <p style='margin: 0; color: #667eea;'>© 2024 Proyek UAS Data Mining</p>
             </div>
         """, unsafe_allow_html=True)
     
-    # Routing Halaman
     if menu == "Beranda":
         halaman_beranda()
     elif menu == "Dataset":
@@ -1099,18 +951,12 @@ def main():
     else:
         halaman_tentang()
     
-    # Footer
     st.markdown("---")
     st.markdown("""
         <div class='footer'>
             <h3>❤️ HeartAI - Sistem Prediksi Penyakit Jantung</h3>
-            <p style='margin: 0; opacity: 0.9;'>Proyek UAS Data Mining</p>
-            <p style='margin: 0.5rem 0 0 0; font-size: 0.9rem; opacity: 0.9;'>
-                👩‍🎓 Vania Setyorini (24051214064) & Rozalinda Titalia Putri (24051214069)
-            </p>
-            <p style='margin: 0.5rem 0 0 0; font-size: 0.8rem; opacity: 0.7;'>
-                ⚠️ Hanya untuk tujuan pembelajaran. Bukan alat diagnosis medis.
-            </p>
+            <p>Proyek UAS Data Mining | Vania Setyorini & Rozalinda Titalia Putri</p>
+            <p>⚠️ Hanya untuk tujuan pembelajaran. Bukan alat diagnosis medis.</p>
         </div>
     """, unsafe_allow_html=True)
 
