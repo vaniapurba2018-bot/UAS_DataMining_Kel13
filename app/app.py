@@ -183,14 +183,14 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# KONFIGURASI PATH
+# KONFIGURASI PATH - SESUAI STRUKTUR ANDA
 # ============================================
-BASE_DIR = Path(__file__).parent.parent
+from pathlib import Path
+
+# Karena app.py ada di dalam folder 'app/'
+BASE_DIR = Path(__file__).parent.parent  # naik ke root repo
 DATA_PATH = BASE_DIR / "dataset" / "heart.csv"
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
-KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
-
-    
 # ============================================
 # KONSTANTA
 # ============================================
