@@ -185,8 +185,7 @@ st.markdown("""
 # ============================================
 # KONFIGURASI PATH
 # ============================================
-BASE_DIR = Path.cwd()
-
+BASE_DIR = Path(__file__).parent.parent
 DATA_PATH = BASE_DIR / "dataset" / "heart.csv"
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
 KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
