@@ -248,29 +248,7 @@ def find_heart_csv():
 # Cari file dataset
 DATA_PATH = find_heart_csv()
 
-# Tampilkan debug info (HAPUS BARIS INI SETELAH BERHASIL)
-st.sidebar.markdown("### 🔍 Debug Info")
-st.sidebar.markdown(f"**Current working directory:** `{Path.cwd()}`")
-st.sidebar.markdown(f"**__file__ location:** `{Path(__file__).resolve()}`")
-st.sidebar.markdown(f"**DATA_PATH found:** `{DATA_PATH if DATA_PATH else 'NOT FOUND'}`")
 
-if DATA_PATH is None:
-    st.error("""
-    ❌ **CRITICAL ERROR: File heart.csv tidak ditemukan!**
-    
-    ### Langkah yang harus dilakukan:
-    
-    1️⃣ **Upload file heart.csv langsung ke root folder**
-       - Buka repository GitHub Anda
-       - Upload heart.csv ke folder utama (bukan di dalam app/)
-    
-    2️⃣ **Atau gunakan URL dataset eksternal** (tambahkan kode di bawah)
-    
-    3️⃣ **Periksa nama file** - pastikan namanya tepat `heart.csv` (case sensitive)
-    
-    ### Sementara, saya akan menggunakan dataset dari URL:
-    """)
-    
     # FALLBACK TERAKHIR: Gunakan URL langsung
     import urllib.request
     try:
