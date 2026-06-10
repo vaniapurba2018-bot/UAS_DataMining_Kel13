@@ -323,107 +323,35 @@ TIPE_NYERI_DADA = {
 }
 
 # ============================================
-# FUNGSI LOAD DATA
+# FUNGSI LOAD DATA - DENGAN ERROR HANDLING
 # ============================================
 @st.cache_data
 def load_data():
     try:
+        # Pastikan DATA_PATH tersedia
+        if DATA_PATH is None:
+            st.error("DATA_PATH is None!")
+            return pd.DataFrame()
+        
+        # Cek apakah file benar-benar ada
+        if not DATA_PATH.exists():
+            st.error(f"File tidak ditemukan di: {DATA_PATH}")
+            return pd.DataFrame()
+        
+        # Baca file CSV
         df = pd.read_csv(DATA_PATH)
+        
+        # Validasi: pastikan kolom 'target' ada
+        if 'target' not in df.columns:
+            st.warning("Kolom 'target' tidak ditemukan. Cek file CSV.")
+            st.write("Kolom yang ada:", df.columns.tolist())
+            return pd.DataFrame()
+        
         return df
+        
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        st.error(f"Error detail: {type(e).__name__}: {str(e)}")
         return pd.DataFrame()
-
-@st.cache_resource
-def load_model():
-    try:
-        return joblib.load(MODEL_PATH)
-    except Exception as e:
-        st.error(f"Error loading model: {e}")
-        return None
-
-@st.cache_resource
-def load_kmeans():
-    try:
-        return joblib.load(KMEANS_PATH)
-    except Exception as e:
-        st.error(f"Error loading K-Means model: {e}")
-        return None
-
-@st.cache_resource
-def train_advanced_models():
-    """Melatih beberapa model advanced untuk ensemble"""
-    df = load_data()
-    if df.empty:
-        return None, None, None, None, None, None
-    
-    X = df[FITUR]
-    y = df['target']
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)
-    X_test_scaled = scaler.transform(X_test)
-    
-    models = {
-        'Regresi Logistik': LogisticRegression(max_iter=1000, random_state=42),
-        'Random Forest': RandomForestClassifier(n_estimators=100, random_state=42),
-        'Gradient Boosting': GradientBoostingClassifier(n_estimators=100, random_state=42),
-        'SVM': SVC(probability=True, random_state=42)
-    }
-    
-    trained_models = {}
-    for name, model in models.items():
-        model.fit(X_train_scaled, y_train)
-        trained_models[name] = model
-    
-    ensemble = VotingClassifier(estimators=[
-        ('lr', trained_models['Regresi Logistik']),
-        ('rf', trained_models['Random Forest']),
-        ('gb', trained_models['Gradient Boosting']),
-        ('svm', trained_models['SVM'])
-    ], voting='soft')
-    ensemble.fit(X_train_scaled, y_train)
-    trained_models['Ensemble'] = ensemble
-    
-    return trained_models, scaler, X_test_scaled, y_test, X_train_scaled, y_train
-
-@st.cache_resource
-def get_shap_data():
-    """Mendapatkan data SHAP dengan penanganan yang tepat"""
-    df = load_data()
-    X = df[FITUR]
-    y = df['target']
-    
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-    
-    rf_model = RandomForestClassifier(n_estimators=100, random_state=42, n_jobs=-1)
-    rf_model.fit(X_train, y_train)
-    
-    try:
-        background = shap.sample(X_train, 100, random_state=42)
-        explainer = shap.TreeExplainer(rf_model, background)
-        shap_values = explainer.shap_values(X_test)
-        
-        if isinstance(shap_values, list):
-            shap_values_to_use = shap_values[1]
-        else:
-            shap_values_to_use = shap_values
-        
-        if len(shap_values_to_use.shape) == 3:
-            shap_values_to_use = shap_values_to_use[:, :, 1]
-        
-        return explainer, shap_values_to_use, X_test, rf_model
-        
-    except Exception as e:
-        st.warning(f"Peringatan SHAP: {e}. Membuat nilai SHAP alternatif.")
-        feature_importance = rf_model.feature_importances_
-        mock_shap = np.zeros((X_test.shape[0], len(FITUR)))
-        for i in range(X_test.shape[0]):
-            mock_shap[i] = (X_test.iloc[i].values - X_train.mean().values) * feature_importance
-        
-        return None, mock_shap, X_test, rf_model
 
 # ============================================
 # FORM INPUT PASIEN
