@@ -181,11 +181,118 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+# ============================================
+# KONFIGURASI PATH - AUTO DETECT (PASTI BERHASIL)
+# ============================================
+import os
+from pathlib import Path
+import streamlit as st
 
-BASE_DIR = Path(__file__).parent.parent  # 👈 INI YANG BENAR
-DATA_PATH = BASE_DIR / "dataset" / "heart.csv"
+# Fungsi untuk mencari file heart.csv di seluruh struktur project
+def find_heart_csv():
+    """Mencari file heart.csv di berbagai kemungkinan lokasi"""
+    
+    # Daftar semua kemungkinan path yang akan dicoba
+    possible_paths = []
+    
+    # 1. Path berdasarkan lokasi file script saat ini
+    current_file = Path(__file__).resolve()
+    current_dir = current_file.parent
+    
+    # Coba berbagai level direktori
+    for level in range(4):  # naik 0-3 level
+        base = current_dir
+        for _ in range(level):
+            base = base.parent
+        
+        possible_paths.append(base / "dataset" / "heart.csv")
+        possible_paths.append(base / "data" / "heart.csv")
+        possible_paths.append(base / "heart.csv")
+        possible_paths.append(base / "app" / "dataset" / "heart.csv")
+    
+    # 2. Path absolut yang umum di Streamlit Cloud
+    possible_paths.extend([
+        Path("/mount/src/uas_datamining_kell3/dataset/heart.csv"),
+        Path("/mount/src/UAS_DataMining_Kel13/dataset/heart.csv"),
+        Path("/app/dataset/heart.csv"),
+        Path("/home/appuser/dataset/heart.csv"),
+    ])
+    
+    # 3. Path dari current working directory
+    cwd = Path.cwd()
+    possible_paths.extend([
+        cwd / "dataset" / "heart.csv",
+        cwd / "heart.csv",
+        cwd / "app" / "dataset" / "heart.csv",
+    ])
+    
+    # 4. Cari semua file heart.csv di seluruh project (paling lambat tapi paling akurat)
+    try:
+        for root, dirs, files in os.walk(cwd):
+            if "heart.csv" in files:
+                possible_paths.append(Path(root) / "heart.csv")
+                break  # cukup satu saja
+    except:
+        pass
+    
+    # Coba semua path
+    for path in possible_paths:
+        try:
+            if path.exists():
+                return path
+        except:
+            continue
+    
+    return None
+
+# Cari file dataset
+DATA_PATH = find_heart_csv()
+
+# Tampilkan debug info (HAPUS BARIS INI SETELAH BERHASIL)
+st.sidebar.markdown("### 🔍 Debug Info")
+st.sidebar.markdown(f"**Current working directory:** `{Path.cwd()}`")
+st.sidebar.markdown(f"**__file__ location:** `{Path(__file__).resolve()}`")
+st.sidebar.markdown(f"**DATA_PATH found:** `{DATA_PATH if DATA_PATH else 'NOT FOUND'}`")
+
+if DATA_PATH is None:
+    st.error("""
+    ❌ **CRITICAL ERROR: File heart.csv tidak ditemukan!**
+    
+    ### Langkah yang harus dilakukan:
+    
+    1️⃣ **Upload file heart.csv langsung ke root folder**
+       - Buka repository GitHub Anda
+       - Upload heart.csv ke folder utama (bukan di dalam app/)
+    
+    2️⃣ **Atau gunakan URL dataset eksternal** (tambahkan kode di bawah)
+    
+    3️⃣ **Periksa nama file** - pastikan namanya tepat `heart.csv` (case sensitive)
+    
+    ### Sementara, saya akan menggunakan dataset dari URL:
+    """)
+    
+    # FALLBACK TERAKHIR: Gunakan URL langsung
+    import urllib.request
+    try:
+        # Download dataset dari URL public
+        url = "https://raw.githubusercontent.com/datasets/heart-disease/main/data/cleveland.csv"
+        os.makedirs("dataset", exist_ok=True)
+        urllib.request.urlretrieve(url, "dataset/heart.csv")
+        DATA_PATH = Path("dataset/heart.csv")
+        st.success("✅ Berhasil mendownload dataset dari URL sebagai fallback!")
+    except Exception as e:
+        st.error(f"Gagal download dataset: {e}")
+        st.stop()
+
+# Path untuk model
+BASE_DIR = DATA_PATH.parent.parent if DATA_PATH.parent.name == "dataset" else DATA_PATH.parent
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
 KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
+
+# Buat folder model jika belum ada
+MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+st.sidebar.success(f"✅ Dataset ditemukan di: `{DATA_PATH}`")
 # ============================================
 # KONSTANTA
 # ============================================
