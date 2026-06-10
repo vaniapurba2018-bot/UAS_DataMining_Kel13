@@ -183,34 +183,46 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# KONFIGURASI PATH (Perbaikan)
+# KONFIGURASI PATH (Dynamic - Paling Fleksibel)
 # ============================================
-# Ambil direktori tempat file script ini berada
-BASE_DIR = Path(__file__).parent.resolve()   # ← parents[1] diganti parent
+import os
 
-# Coba beberapa kemungkinan lokasi dataset
-possible_data_paths = [
-    BASE_DIR / "dataset" / "heart.csv",           # ./dataset/heart.csv
-    BASE_DIR / "heart.csv",                       # ./heart.csv
-    Path.cwd() / "dataset" / "heart.csv",         # dari working directory
-    Path("/mount/src/uas_datamining_kell3/dataset/heart.csv")  # untuk deployment
-]
+def find_dataset_file(filename="heart.csv"):
+    """Cari file dataset di berbagai kemungkinan lokasi"""
+    possible_locations = [
+        Path.cwd() / "dataset" / filename,                    # current working directory
+        Path(__file__).parent / "dataset" / filename,         # sejajar script
+        Path(__file__).parent.parent / "dataset" / filename,  # satu level di atas script
+        Path("/mount/src/uas_datamining_kell3/dataset") / filename,  # streamlit cloud
+        Path("/app/dataset") / filename,                      # alternative deployment
+    ]
+    
+    # Tambahkan path dari environment variable jika ada
+    if os.environ.get("DATASET_PATH"):
+        possible_locations.append(Path(os.environ["DATASET_PATH"]) / filename)
+    
+    for loc in possible_locations:
+        if loc.exists():
+            return loc
+    
+    return None
 
-# Cari file yang benar-benar ada
-DATA_PATH = None
-for path in possible_data_paths:
-    if path.exists():
-        DATA_PATH = path
-        break
+# Tentukan BASE_DIR
+if "__file__" in globals():
+    BASE_DIR = Path(__file__).parent.resolve()
+else:
+    BASE_DIR = Path.cwd()
 
-# Jika tetap tidak ditemukan, tampilkan error yang lebih jelas
+# Cari dataset
+DATA_PATH = find_dataset_file("heart.csv")
+
 if DATA_PATH is None:
-    st.error(f"❌ File heart.csv tidak ditemukan. Sudah cek di: {[str(p) for p in possible_data_paths]}")
-    st.stop()
-
-MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
-KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
-
+    # Fallback: tampilkan error dan stop
+    st.error("""
+    ❌ **Dataset tidak ditemukan!**
+    
+    Pastikan file `heart.csv` diletakkan di folder `dataset/` dengan struktur:
+    
 # ============================================
 # KONSTANTA
 # ============================================
