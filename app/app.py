@@ -183,66 +183,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# KONFIGURASI PATH - KHUSUS STREAMLIT CLOUD
+# KONFIGURASI PATH
 # ============================================
-import os
-from pathlib import Path
-import pandas as pd
-
-# Di Streamlit Cloud, file berada di repositori GitHub
-# PATH relatif terhadap file app.py yang sedang berjalan
-BASE_DIR = Path(__file__).parent.resolve()
-
-# Cari dataset di beberapa kemungkinan lokasi
-DATA_PATH = None
-possible_paths = [
-    BASE_DIR / "dataset" / "heart.csv",        # dataset/heart.csv
-    BASE_DIR / "data" / "heart.csv",           # data/heart.csv
-    BASE_DIR / "heart.csv",                    # heart.csv di root
-]
-
-for path in possible_paths:
-    if path.exists():
-        DATA_PATH = path
-        break
-
-# JIKA TIDAK DITEMUKAN - Gunakan URL raw GitHub sebagai fallback
-if DATA_PATH is None or not DATA_PATH.exists():
-    import requests
-    import urllib.request
-    
-    # Buat folder dataset jika belum ada
-    (BASE_DIR / "dataset").mkdir(exist_ok=True)
-    fallback_path = BASE_DIR / "dataset" / "heart.csv"
-    
-    # URL raw dari dataset di GitHub (ganti dengan repo Anda)
-    # Contoh: https://raw.githubusercontent.com/username/repo/main/dataset/heart.csv
-    GITHUB_RAW_URL = "https://raw.githubusercontent.com/vaniasetyo/uas_datamining_kell3/main/dataset/heart.csv"
-    
-    try:
-        urllib.request.urlretrieve(GITHUB_RAW_URL, fallback_path)
-        if fallback_path.exists():
-            DATA_PATH = fallback_path
-            st.success("✅ Dataset berhasil diunduh dari GitHub!")
-        else:
-            st.error("❌ Gagal mengunduh dataset dari GitHub.")
-            st.stop()
-    except Exception as e:
-        st.error(f"❌ Error mengunduh dataset: {e}")
-        st.info("""
-        **Cara manual:**
-        1. Pastikan file `heart.csv` sudah di-commit ke repository GitHub Anda
-        2. Letakkan di folder `dataset/` di repo
-        3. Redeploy aplikasi di Streamlit Cloud
-        """)
-        st.stop()
-
-# Path untuk model (opsional, jika tidak ada akan dibuat saat training)
+BASE_DIR = Path(__file__).resolve().parents[1]
+DATA_PATH = BASE_DIR / "dataset" / "heart.csv"
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
 KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
 
-# Buat folder model jika belum ada
-MODEL_PATH.parent.mkdir(exist_ok=True)
     
 # ============================================
 # KONSTANTA
