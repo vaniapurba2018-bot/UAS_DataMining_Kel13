@@ -239,31 +239,46 @@ TIPE_NYERI_DADA = {
 }
 
 # ============================================
-# FUNGSI LOAD DATA
+# FUNGSI LOAD DATA - PAKAI DATA_PATH YANG SUDAH DITEMUKAN
 # ============================================
 @st.cache_data
 def load_data():
+    """Load dataset dari DATA_PATH global"""
+    global DATA_PATH
+    
     try:
+        # Gunakan DATA_PATH yang sudah ditemukan di konfigurasi
         if DATA_PATH is None:
-            st.error("DATA_PATH is None!")
+            # Coba cari ulang
+            possible_paths = [
+                Path.cwd() / "dataset" / "heart.csv",
+                Path(__file__).parent.parent / "dataset" / "heart.csv",
+                Path("/mount/src/uas_datamining_kel13/dataset/heart.csv"),
+                Path("/mount/src/uas_datamining_kell3/dataset/heart.csv"),
+            ]
+            for p in possible_paths:
+                if p.exists():
+                    DATA_PATH = p
+                    break
+        
+        if DATA_PATH is None or not DATA_PATH.exists():
+            st.error(f"Dataset tidak ditemukan. Coba cek path: {DATA_PATH}")
             return pd.DataFrame()
         
-        if not DATA_PATH.exists():
-            st.error(f"File tidak ditemukan di: {DATA_PATH}")
-            return pd.DataFrame()
-        
+        # Baca file CSV
         df = pd.read_csv(DATA_PATH)
         
-        # Rename kolom jika perlu (untuk dataset Cleveland)
+        # Jika kolom tidak sesuai (dataset Cleveland tanpa header)
         if df.shape[1] == 14 and 'target' not in df.columns:
-            # Asumsikan ini dataset Cleveland tanpa header
             column_names = FITUR + ['target']
             df = pd.read_csv(DATA_PATH, names=column_names, na_values='?')
             df = df.dropna()
             df['target'] = (df['target'] > 0).astype(int)
         
+        # Pastikan kolom target ada
         if 'target' not in df.columns:
-            st.error("Kolom 'target' tidak ditemukan!")
+            st.error("Kolom 'target' tidak ditemukan dalam dataset!")
+            st.write("Kolom yang ada:", df.columns.tolist())
             return pd.DataFrame()
         
         return df
