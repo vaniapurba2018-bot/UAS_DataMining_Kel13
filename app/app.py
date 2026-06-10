@@ -183,10 +183,31 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# KONFIGURASI PATH
+# KONFIGURASI PATH (Perbaikan)
 # ============================================
-BASE_DIR = Path(__file__).parent.resolve() 
-DATA_PATH = BASE_DIR / "dataset" / "heart.csv"  
+# Ambil direktori tempat file script ini berada
+BASE_DIR = Path(__file__).parent.resolve()   # ← parents[1] diganti parent
+
+# Coba beberapa kemungkinan lokasi dataset
+possible_data_paths = [
+    BASE_DIR / "dataset" / "heart.csv",           # ./dataset/heart.csv
+    BASE_DIR / "heart.csv",                       # ./heart.csv
+    Path.cwd() / "dataset" / "heart.csv",         # dari working directory
+    Path("/mount/src/uas_datamining_kell3/dataset/heart.csv")  # untuk deployment
+]
+
+# Cari file yang benar-benar ada
+DATA_PATH = None
+for path in possible_data_paths:
+    if path.exists():
+        DATA_PATH = path
+        break
+
+# Jika tetap tidak ditemukan, tampilkan error yang lebih jelas
+if DATA_PATH is None:
+    st.error(f"❌ File heart.csv tidak ditemukan. Sudah cek di: {[str(p) for p in possible_data_paths]}")
+    st.stop()
+
 MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
 KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
 
