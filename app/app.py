@@ -183,45 +183,66 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ============================================
-# KONFIGURASI PATH (Dynamic - Paling Fleksibel)
+# KONFIGURASI PATH - KHUSUS STREAMLIT CLOUD
 # ============================================
 import os
+from pathlib import Path
+import pandas as pd
 
-def find_dataset_file(filename="heart.csv"):
-    """Cari file dataset di berbagai kemungkinan lokasi"""
-    possible_locations = [
-        Path.cwd() / "dataset" / filename,                    # current working directory
-        Path(__file__).parent / "dataset" / filename,         # sejajar script
-        Path(__file__).parent.parent / "dataset" / filename,  # satu level di atas script
-        Path("/mount/src/uas_datamining_kell3/dataset") / filename,  # streamlit cloud
-        Path("/app/dataset") / filename,                      # alternative deployment
-    ]
-    
-    # Tambahkan path dari environment variable jika ada
-    if os.environ.get("DATASET_PATH"):
-        possible_locations.append(Path(os.environ["DATASET_PATH"]) / filename)
-    
-    for loc in possible_locations:
-        if loc.exists():
-            return loc
-    
-    return None
+# Di Streamlit Cloud, file berada di repositori GitHub
+# PATH relatif terhadap file app.py yang sedang berjalan
+BASE_DIR = Path(__file__).parent.resolve()
 
-# Tentukan BASE_DIR
-if "__file__" in globals():
-    BASE_DIR = Path(__file__).parent.resolve()
-else:
-    BASE_DIR = Path.cwd()
+# Cari dataset di beberapa kemungkinan lokasi
+DATA_PATH = None
+possible_paths = [
+    BASE_DIR / "dataset" / "heart.csv",        # dataset/heart.csv
+    BASE_DIR / "data" / "heart.csv",           # data/heart.csv
+    BASE_DIR / "heart.csv",                    # heart.csv di root
+]
 
-# Cari dataset
-DATA_PATH = find_dataset_file("heart.csv")
+for path in possible_paths:
+    if path.exists():
+        DATA_PATH = path
+        break
 
-if DATA_PATH is None:
-    # Fallback: tampilkan error dan stop
-    st.error("""
-    ❌ **Dataset tidak ditemukan!**
+# JIKA TIDAK DITEMUKAN - Gunakan URL raw GitHub sebagai fallback
+if DATA_PATH is None or not DATA_PATH.exists():
+    import requests
+    import urllib.request
     
-    Pastikan file `heart.csv` diletakkan di folder `dataset/` dengan struktur:
+    # Buat folder dataset jika belum ada
+    (BASE_DIR / "dataset").mkdir(exist_ok=True)
+    fallback_path = BASE_DIR / "dataset" / "heart.csv"
+    
+    # URL raw dari dataset di GitHub (ganti dengan repo Anda)
+    # Contoh: https://raw.githubusercontent.com/username/repo/main/dataset/heart.csv
+    GITHUB_RAW_URL = "https://raw.githubusercontent.com/vaniasetyo/uas_datamining_kell3/main/dataset/heart.csv"
+    
+    try:
+        urllib.request.urlretrieve(GITHUB_RAW_URL, fallback_path)
+        if fallback_path.exists():
+            DATA_PATH = fallback_path
+            st.success("✅ Dataset berhasil diunduh dari GitHub!")
+        else:
+            st.error("❌ Gagal mengunduh dataset dari GitHub.")
+            st.stop()
+    except Exception as e:
+        st.error(f"❌ Error mengunduh dataset: {e}")
+        st.info("""
+        **Cara manual:**
+        1. Pastikan file `heart.csv` sudah di-commit ke repository GitHub Anda
+        2. Letakkan di folder `dataset/` di repo
+        3. Redeploy aplikasi di Streamlit Cloud
+        """)
+        st.stop()
+
+# Path untuk model (opsional, jika tidak ada akan dibuat saat training)
+MODEL_PATH = BASE_DIR / "model" / "heart_model.pkl"
+KMEANS_PATH = BASE_DIR / "model" / "kmeans_model.pkl"
+
+# Buat folder model jika belum ada
+MODEL_PATH.parent.mkdir(exist_ok=True)
     
 # ============================================
 # KONSTANTA
