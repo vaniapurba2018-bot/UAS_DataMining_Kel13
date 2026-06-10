@@ -226,12 +226,12 @@ def find_heart_csv():
         cwd / "app" / "dataset" / "heart.csv",
     ])
     
-    # 4. Cari semua file heart.csv di seluruh project (paling lambat tapi paling akurat)
+    # 4. Cari semua file heart.csv di seluruh project
     try:
         for root, dirs, files in os.walk(cwd):
             if "heart.csv" in files:
                 possible_paths.append(Path(root) / "heart.csv")
-                break  # cukup satu saja
+                break
     except:
         pass
     
@@ -248,8 +248,8 @@ def find_heart_csv():
 # Cari file dataset
 DATA_PATH = find_heart_csv()
 
-
-    # FALLBACK TERAKHIR: Gunakan URL langsung
+# FALLBACK jika tidak ditemukan
+if DATA_PATH is None:
     import urllib.request
     try:
         # Download dataset dari URL public
